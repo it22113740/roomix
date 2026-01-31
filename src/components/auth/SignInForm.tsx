@@ -3,16 +3,93 @@ import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
+import Alert from "@/components/ui/alert/Alert";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
 import Link from "next/link";
-import React, { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { authAPI } from "@/lib/api";
 
 export default function SignInForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [passwordResetSuccess, setPasswordResetSuccess] = useState(false);
+
+  // Check if password was reset successfully
+  useEffect(() => {
+    if (searchParams.get("passwordReset") === "true") {
+      setPasswordResetSuccess(true);
+      // Clear the query parameter
+      router.replace("/signin", { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+    if (showError) {
+      setShowError(false);
+    }
+  };
+
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      newErrors.email = "Invalid email format";
+    if (!formData.password) newErrors.password = "Password is required";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    try {
+      setLoading(true);
+      setShowError(false);
+      const user = await authAPI.signin(formData.email, formData.password);
+      
+      // Store user in localStorage
+      localStorage.setItem("user", JSON.stringify(user));
+      
+      // Store hotel if available
+      if (user.hotel) {
+        localStorage.setItem("hotel", JSON.stringify(user.hotel));
+      }
+      
+      if (isChecked) {
+        localStorage.setItem("rememberMe", "true");
+      }
+
+      // Redirect to the intended page or dashboard
+      const redirectTo = searchParams.get("redirect") || "/";
+      router.push(redirectTo);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to sign in");
+      setShowError(true);
+      console.error("Error signing in:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <div className="flex flex-col flex-1 lg:w-1/2 w-full">
-      <div className="w-full max-w-md sm:pt-10 mx-auto mb-5">
+      {/* <div className="w-full max-w-md sm:pt-10 mx-auto mb-5">
         <Link
           href="/"
           className="inline-flex items-center text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
@@ -20,9 +97,19 @@ export default function SignInForm() {
           <ChevronLeftIcon />
           Back to dashboard
         </Link>
-      </div>
+      </div> */}
       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
         <div>
+          {passwordResetSuccess && (
+            <div className="mb-6">
+              <Alert
+                variant="success"
+                title="Success!"
+                message="Your password has been reset successfully. Please sign in with your new password."
+                showLink={false}
+              />
+            </div>
+          )}
           <div className="mb-5 sm:mb-8">
             <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
               Sign In
@@ -84,13 +171,31 @@ export default function SignInForm() {
                 </span>
               </div>
             </div>
-            <form>
+            {showError && (
+              <div className="mb-6">
+                <Alert
+                  variant="error"
+                  title="Error"
+                  message={errorMessage}
+                  showLink={false}
+                />
+              </div>
+            )}
+            <form onSubmit={handleSubmit}>
               <div className="space-y-6">
                 <div>
                   <Label>
                     Email <span className="text-error-500">*</span>{" "}
                   </Label>
-                  <Input placeholder="info@gmail.com" type="email" />
+                  <Input
+                    name="email"
+                    placeholder="info@gmail.com"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    error={!!errors.email}
+                    hint={errors.email}
+                  />
                 </div>
                 <div>
                   <Label>
@@ -98,8 +203,13 @@ export default function SignInForm() {
                   </Label>
                   <div className="relative">
                     <Input
+                      name="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="Enter your password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      error={!!errors.password}
+                      hint={errors.password}
                     />
                     <span
                       onClick={() => setShowPassword(!showPassword)}
@@ -128,8 +238,8 @@ export default function SignInForm() {
                   </Link>
                 </div>
                 <div>
-                  <Button className="w-full" size="sm">
-                    Sign in
+                  <Button className="w-full" size="sm" type="submit" disabled={loading}>
+                    {loading ? "Signing in..." : "Sign in"}
                   </Button>
                 </div>
               </div>

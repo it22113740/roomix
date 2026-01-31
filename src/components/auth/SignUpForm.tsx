@@ -2,16 +2,87 @@
 import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
+import Button from "@/components/ui/button/Button";
+import Alert from "@/components/ui/alert/Alert";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import React, { useState } from "react";
+import { authAPI } from "@/lib/api";
 
 export default function SignUpForm() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+    if (showError) {
+      setShowError(false);
+    }
+  };
+
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
+    if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      newErrors.email = "Invalid email format";
+    if (!formData.password) newErrors.password = "Password is required";
+    else if (formData.password.length < 6)
+      newErrors.password = "Password must be at least 6 characters";
+    if (!isChecked) newErrors.terms = "You must agree to the terms and conditions";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    try {
+      setLoading(true);
+      setShowError(false);
+      const user = await authAPI.signup({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+      });
+
+      setShowSuccess(true);
+      setTimeout(() => {
+        // Store user in localStorage
+        localStorage.setItem("user", JSON.stringify(user));
+        router.push("/");
+      }, 1500);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to sign up");
+      setShowError(true);
+      console.error("Error signing up:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <div className="flex flex-col flex-1 lg:w-1/2 w-full overflow-y-auto no-scrollbar">
-      <div className="w-full max-w-md sm:pt-10 mx-auto mb-5">
+      {/* <div className="w-full max-w-md sm:pt-10 mx-auto mb-5">
         <Link
           href="/"
           className="inline-flex items-center text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
@@ -19,7 +90,7 @@ export default function SignUpForm() {
           <ChevronLeftIcon />
           Back to dashboard
         </Link>
-      </div>
+      </div> */}
       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
         <div>
           <div className="mb-5 sm:mb-8">
@@ -83,7 +154,27 @@ export default function SignUpForm() {
                 </span>
               </div>
             </div>
-            <form>
+            {showError && (
+              <div className="mb-6">
+                <Alert
+                  variant="error"
+                  title="Error"
+                  message={errorMessage}
+                  showLink={false}
+                />
+              </div>
+            )}
+            {showSuccess && (
+              <div className="mb-6">
+                <Alert
+                  variant="success"
+                  title="Success!"
+                  message="Account created successfully. Redirecting..."
+                  showLink={false}
+                />
+              </div>
+            )}
+            <form onSubmit={handleSubmit}>
               <div className="space-y-5">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   {/* <!-- First Name --> */}
@@ -93,9 +184,13 @@ export default function SignUpForm() {
                     </Label>
                     <Input
                       type="text"
-                      id="fname"
-                      name="fname"
+                      id="firstName"
+                      name="firstName"
                       placeholder="Enter your first name"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      error={!!errors.firstName}
+                      hint={errors.firstName}
                     />
                   </div>
                   {/* <!-- Last Name --> */}
@@ -105,9 +200,13 @@ export default function SignUpForm() {
                     </Label>
                     <Input
                       type="text"
-                      id="lname"
-                      name="lname"
+                      id="lastName"
+                      name="lastName"
                       placeholder="Enter your last name"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      error={!!errors.lastName}
+                      hint={errors.lastName}
                     />
                   </div>
                 </div>
@@ -121,6 +220,10 @@ export default function SignUpForm() {
                     id="email"
                     name="email"
                     placeholder="Enter your email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    error={!!errors.email}
+                    hint={errors.email}
                   />
                 </div>
                 {/* <!-- Password --> */}
@@ -130,8 +233,13 @@ export default function SignUpForm() {
                   </Label>
                   <div className="relative">
                     <Input
+                      name="password"
                       placeholder="Enter your password"
                       type={showPassword ? "text" : "password"}
+                      value={formData.password}
+                      onChange={handleChange}
+                      error={!!errors.password}
+                      hint={errors.password}
                     />
                     <span
                       onClick={() => setShowPassword(!showPassword)}
@@ -163,11 +271,19 @@ export default function SignUpForm() {
                     </span>
                   </p>
                 </div>
+                {errors.terms && (
+                  <p className="text-sm text-error-500">{errors.terms}</p>
+                )}
                 {/* <!-- Button --> */}
                 <div>
-                  <button className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600">
-                    Sign Up
-                  </button>
+                  <Button
+                    className="w-full"
+                    size="sm"
+                    type="submit"
+                    disabled={loading}
+                  >
+                    {loading ? "Signing up..." : "Sign Up"}
+                  </Button>
                 </div>
               </div>
             </form>

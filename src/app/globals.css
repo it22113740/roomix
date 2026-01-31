@@ -750,3 +750,14 @@ span.flatpickr-weekday,
   opacity: 0.8;
   cursor: grabbing; /* Changes the cursor to indicate dragging */
 }
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

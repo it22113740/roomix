@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 interface Option {
   value: string;
   text: string;
   selected: boolean;
+  icon?: string; // Optional icon (emoji or icon identifier)
 }
 
 interface MultiSelectProps {
@@ -24,9 +25,32 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   const [selectedOptions, setSelectedOptions] =
     useState<string[]>(defaultSelected);
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const toggleDropdown = () => {
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const toggleDropdown = (e?: React.MouseEvent) => {
     if (disabled) return;
+    if (e) {
+      e.stopPropagation();
+    }
     setIsOpen((prev) => !prev);
   };
 
@@ -46,7 +70,13 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   };
 
   const selectedValuesText = selectedOptions.map(
-    (value) => options.find((option) => option.value === value)?.text || ""
+    (value) => {
+      const option = options.find((option) => option.value === value);
+      return {
+        text: option?.text || "",
+        icon: option?.icon || "",
+      };
+    }
   );
 
   return (
@@ -55,23 +85,27 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
         {label}
       </label>
 
-      <div className="relative z-20 inline-block w-full">
+      <div className="relative z-20 inline-block w-full" ref={dropdownRef}>
         <div className="relative flex flex-col items-center">
-          <div onClick={toggleDropdown}  className="w-full">
+          <div onClick={(e) => toggleDropdown(e)} className="w-full">
             <div className="mb-2 flex h-11 rounded-lg border border-gray-300 py-1.5 pl-3 pr-3 shadow-theme-xs outline-hidden transition focus:border-brand-300 focus:shadow-focus-ring dark:border-gray-700 dark:bg-gray-900 dark:focus:border-brand-300">
               <div className="flex flex-wrap flex-auto gap-2">
                 {selectedValuesText.length > 0 ? (
-                  selectedValuesText.map((text, index) => (
+                  selectedValuesText.map((item, index) => (
                     <div
                       key={index}
                       className="group flex items-center justify-center rounded-full border-[0.7px] border-transparent bg-gray-100 py-1 pl-2.5 pr-2 text-sm text-gray-800 hover:border-gray-200 dark:bg-gray-800 dark:text-white/90 dark:hover:border-gray-800"
                     >
-                      <span className="flex-initial max-w-full">{text}</span>
+                      {item.icon && (
+                        <span className="mr-1.5 text-base flex-shrink-0">{item.icon}</span>
+                      )}
+                      <span className="flex-initial max-w-full">{item.text}</span>
                       <div className="flex flex-row-reverse flex-auto">
                         <div
-                          onClick={() =>
-                            removeOption(index, selectedOptions[index])
-                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeOption(index, selectedOptions[index]);
+                          }}
                           className="pl-2 text-gray-500 cursor-pointer group-hover:text-gray-400 dark:text-gray-400"
                         >
                           <svg
@@ -104,7 +138,10 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
               <div className="flex items-center py-1 pl-1 pr-1 w-7">
                 <button
                   type="button"
-                  onClick={toggleDropdown} 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleDropdown(e);
+                  }}
                   className="w-5 h-5 text-gray-700 outline-hidden cursor-pointer focus:outline-hidden dark:text-gray-400"
                 >
                   <svg
@@ -147,7 +184,10 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                             : ""
                         }`}
                       >
-                        <div className="mx-2 leading-6 text-gray-800 dark:text-white/90">
+                        {option.icon && (
+                          <span className="ml-2 mr-2 text-lg flex-shrink-0">{option.icon}</span>
+                        )}
+                        <div className="leading-6 text-gray-800 dark:text-white/90">
                           {option.text}
                         </div>
                       </div>

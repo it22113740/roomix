@@ -1,44 +1,214 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useModal } from "../../hooks/useModal";
 import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
 import Input from "../form/input/InputField";
 import Label from "../form/Label";
+import Alert from "../ui/alert/Alert";
+import AvatarUpload from "../form/AvatarUpload";
 import Image from "next/image";
-
+import { User } from "@/types/user";
+import { authAPI } from "@/lib/api";
 
 export default function UserMetaCard() {
+  const router = useRouter();
   const { isOpen, openModal, closeModal } = useModal();
-  const handleSave = () => {
-    // Handle save logic here
-    console.log("Saving changes...");
-    closeModal();
+  const [user, setUser] = useState<User | null>(null);
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    bio: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [avatar, setAvatar] = useState<string | undefined>(undefined);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    loadUser();
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && user) {
+      // Reload form data when modal opens
+      setFormData({
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        bio: user.bio || "",
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+      setAvatar(user.avatar);
+      setErrors({});
+      setShowError(false);
+      setShowSuccess(false);
+    }
+  }, [isOpen, user]);
+
+  const loadUser = async () => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr);
+        setUser(userData);
+        setAvatar(userData.avatar);
+        setFormData({
+          firstName: userData.firstName || "",
+          lastName: userData.lastName || "",
+          email: userData.email || "",
+          phone: userData.phone || "",
+          bio: userData.bio || "",
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
+      } catch (err) {
+        console.error("Error parsing user data:", err);
+      }
+    }
   };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+    if (showError) {
+      setShowError(false);
+    }
+  };
+
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
+    if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      newErrors.email = "Invalid email format";
+    
+    if (formData.newPassword) {
+      if (!formData.currentPassword) {
+        newErrors.currentPassword = "Current password is required to change password";
+      }
+      if (formData.newPassword.length < 6) {
+        newErrors.newPassword = "New password must be at least 6 characters";
+      }
+      if (formData.newPassword !== formData.confirmPassword) {
+        newErrors.confirmPassword = "Passwords do not match";
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validate() || !user) return;
+
+    try {
+      setLoading(true);
+      setShowError(false);
+      
+      const updates: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone || undefined,
+        bio: formData.bio || undefined,
+        avatar: avatar || undefined,
+      };
+
+      if (formData.newPassword) {
+        updates.currentPassword = formData.currentPassword;
+        updates.newPassword = formData.newPassword;
+      }
+
+      const updatedUser = await authAPI.updateProfile(String(user._id || user.id || ""), updates);
+      
+      // Update localStorage
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        closeModal();
+        // Reset password fields
+        setFormData((prev) => ({
+          ...prev,
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        }));
+      }, 1500);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to update profile");
+      setShowError(true);
+      console.error("Error updating profile:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!user) {
+    return null;
+  }
   return (
     <>
       <div className="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-col items-center w-full gap-6 xl:flex-row">
             <div className="w-20 h-20 overflow-hidden border border-gray-200 rounded-full dark:border-gray-800">
-              <Image
-                width={80}
-                height={80}
-                src="/images/user/owner.jpg"
-                alt="user"
-              />
+              {user.avatar ? (
+                <Image
+                  width={80}
+                  height={80}
+                  src={user.avatar}
+                  alt="user"
+                  className="object-cover w-full h-full"
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                  <svg
+                    className="w-10 h-10 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                    />
+                  </svg>
+                </div>
+              )}
             </div>
             <div className="order-3 xl:order-2">
               <h4 className="mb-2 text-lg font-semibold text-center text-gray-800 dark:text-white/90 xl:text-left">
-                Musharof Chowdhury
+                {user.firstName} {user.lastName}
               </h4>
               <div className="flex flex-col items-center gap-1 text-center xl:flex-row xl:gap-3 xl:text-left">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Team Manager
+                  {user.bio || "User"}
                 </p>
                 <div className="hidden h-3.5 w-px bg-gray-300 dark:bg-gray-700 xl:block"></div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Arizona, United States
+                  {user.email}
                 </p>
               </div>
             </div>
@@ -146,44 +316,42 @@ export default function UserMetaCard() {
               Update your details to keep your profile up-to-date.
             </p>
           </div>
-          <form className="flex flex-col">
+          {showSuccess && (
+            <div className="mb-6 px-2">
+              <Alert
+                variant="success"
+                title="Success!"
+                message="Profile updated successfully."
+                showLink={false}
+              />
+            </div>
+          )}
+          {showError && (
+            <div className="mb-6 px-2">
+              <Alert
+                variant="error"
+                title="Error"
+                message={errorMessage}
+                showLink={false}
+              />
+            </div>
+          )}
+          <form className="flex flex-col" onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
             <div className="custom-scrollbar h-[450px] overflow-y-auto px-2 pb-3">
-              <div>
+              <div className="mt-7">
                 <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
-                  Social Links
+                  Avatar
                 </h5>
-
-                <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
-                  <div>
-                    <Label>Facebook</Label>
-                    <Input
-                      type="text"
-                      defaultValue="https://www.facebook.com/PimjoHQ"
-                    />
-                  </div>
-
-                  <div>
-                    <Label>X.com</Label>
-                    <Input type="text" defaultValue="https://x.com/PimjoHQ" />
-                  </div>
-
-                  <div>
-                    <Label>Linkedin</Label>
-                    <Input
-                      type="text"
-                      defaultValue="https://www.linkedin.com/company/pimjo"
-                    />
-                  </div>
-
-                  <div>
-                    <Label>Instagram</Label>
-                    <Input
-                      type="text"
-                      defaultValue="https://instagram.com/PimjoHQ"
-                    />
-                  </div>
+                <div className="mb-6">
+                  <AvatarUpload
+                    label="Profile Picture"
+                    value={avatar}
+                    onChange={setAvatar}
+                    folder="users/avatars"
+                  />
                 </div>
               </div>
+
               <div className="mt-7">
                 <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
                   Personal Information
@@ -191,38 +359,116 @@ export default function UserMetaCard() {
 
                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
                   <div className="col-span-2 lg:col-span-1">
-                    <Label>First Name</Label>
-                    <Input type="text" defaultValue="Musharof" />
+                    <Label>First Name *</Label>
+                    <Input
+                      type="text"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      error={!!errors.firstName}
+                      hint={errors.firstName}
+                    />
                   </div>
 
                   <div className="col-span-2 lg:col-span-1">
-                    <Label>Last Name</Label>
-                    <Input type="text" defaultValue="Chowdhury" />
+                    <Label>Last Name *</Label>
+                    <Input
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      error={!!errors.lastName}
+                      hint={errors.lastName}
+                    />
                   </div>
 
                   <div className="col-span-2 lg:col-span-1">
-                    <Label>Email Address</Label>
-                    <Input type="text" defaultValue="randomuser@pimjo.com" />
+                    <Label>Email Address *</Label>
+                    <Input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      error={!!errors.email}
+                      hint={errors.email}
+                    />
                   </div>
 
                   <div className="col-span-2 lg:col-span-1">
                     <Label>Phone</Label>
-                    <Input type="text" defaultValue="+09 363 398 46" />
+                    <Input
+                      type="text"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                    />
                   </div>
 
                   <div className="col-span-2">
                     <Label>Bio</Label>
-                    <Input type="text" defaultValue="Team Manager" />
+                    <Input
+                      type="text"
+                      name="bio"
+                      value={formData.bio}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-7">
+                <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
+                  Change Password (Optional)
+                </h5>
+
+                <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
+                  <div className="col-span-2">
+                    <Label>Current Password</Label>
+                    <Input
+                      type="password"
+                      name="currentPassword"
+                      value={formData.currentPassword}
+                      onChange={handleChange}
+                      error={!!errors.currentPassword}
+                      hint={errors.currentPassword}
+                      placeholder="Enter current password to change password"
+                    />
+                  </div>
+
+                  <div className="col-span-2 lg:col-span-1">
+                    <Label>New Password</Label>
+                    <Input
+                      type="password"
+                      name="newPassword"
+                      value={formData.newPassword}
+                      onChange={handleChange}
+                      error={!!errors.newPassword}
+                      hint={errors.newPassword}
+                      placeholder="Enter new password"
+                    />
+                  </div>
+
+                  <div className="col-span-2 lg:col-span-1">
+                    <Label>Confirm New Password</Label>
+                    <Input
+                      type="password"
+                      name="confirmPassword"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      error={!!errors.confirmPassword}
+                      hint={errors.confirmPassword}
+                      placeholder="Confirm new password"
+                    />
                   </div>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
-              <Button size="sm" variant="outline" onClick={closeModal}>
+              <Button size="sm" variant="outline" onClick={closeModal} disabled={loading}>
                 Close
               </Button>
-              <Button size="sm" onClick={handleSave}>
-                Save Changes
+              <Button size="sm" onClick={handleSave} disabled={loading}>
+                {loading ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </form>

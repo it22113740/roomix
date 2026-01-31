@@ -1,21 +1,93 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
-import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
+import { User } from "@/types/user";
 
 export default function UserDropdown() {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
-function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
-  e.stopPropagation();
-  setIsOpen((prev) => !prev);
-}
+  useEffect(() => {
+    // Load user from localStorage
+    const loadUser = () => {
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        try {
+          const userData = JSON.parse(userStr);
+          setUser(userData);
+        } catch (err) {
+          console.error("Error parsing user data:", err);
+        }
+      }
+    };
+
+    loadUser();
+
+    // Listen for storage changes (in case user data is updated elsewhere)
+    const handleStorageChange = () => {
+      loadUser();
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    
+    // Also check periodically in case of same-tab updates
+    const interval = setInterval(loadUser, 1000);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
+
+  function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
+    e.stopPropagation();
+    setIsOpen((prev) => !prev);
+  }
 
   function closeDropdown() {
     setIsOpen(false);
   }
+
+  const handleSignOut = () => {
+    // Clear user data from localStorage
+    localStorage.removeItem("user");
+    localStorage.removeItem("rememberMe");
+    // Redirect to sign in page
+    router.push("/signin");
+    closeDropdown();
+  };
+
+  // If no user, show default or redirect
+  if (!user) {
+    return (
+      <div className="relative">
+        <Link
+          href="/signin"
+          className="flex items-center text-gray-700 dark:text-gray-400"
+        >
+          <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
+            <Image
+              width={44}
+              height={44}
+              src="/images/user/default-avatar.png"
+              alt="User"
+            />
+          </span>
+          <span className="block mr-1 font-medium text-theme-sm">Sign In</span>
+        </Link>
+      </div>
+    );
+  }
+
+  const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User";
+  const userEmail = user.email || "";
+  const userAvatar = user.avatar || "/images/user/default-avatar.png";
+
   return (
     <div className="relative">
       <button
@@ -26,12 +98,13 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
           <Image
             width={44}
             height={44}
-            src="/images/user/owner.jpg"
+            src={userAvatar}
             alt="User"
+            className="object-cover w-full h-full"
           />
         </span>
 
-        <span className="block mr-1 font-medium text-theme-sm">Musharof</span>
+        <span className="block mr-1 font-medium text-theme-sm">{user.firstName || "User"}</span>
 
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
@@ -60,10 +133,10 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
       >
         <div>
           <span className="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
-            Musharof Chowdhury
+            {fullName}
           </span>
           <span className="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
-            randomuser@pimjo.com
+            {userEmail}
           </span>
         </div>
 
@@ -144,12 +217,12 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
             </DropdownItem>
           </li>
         </ul>
-        <Link
-          href="/signin"
-          className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300 w-full text-left"
         >
           <svg
-            className="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
+            className="fill-gray-500 group-hover:fill-gray-700 dark:fill-gray-400 dark:group-hover:fill-gray-300"
             width="24"
             height="24"
             viewBox="0 0 24 24"
@@ -164,7 +237,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
             />
           </svg>
           Sign out
-        </Link>
+        </button>
       </Dropdown>
     </div>
   );
