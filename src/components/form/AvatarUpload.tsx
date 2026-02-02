@@ -5,6 +5,7 @@ import Button from "../ui/button/Button";
 import Label from "./Label";
 import Image from "next/image";
 import { CloseIcon } from "@/icons";
+import ProgressBar from "@/components/ui/ProgressBar";
 
 interface AvatarUploadProps {
   label?: string;
@@ -159,6 +160,7 @@ export default function AvatarUpload({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [showCropModal, setShowCropModal] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const onCropComplete = useCallback(
@@ -185,6 +187,8 @@ export default function AvatarUpload({
 
     try {
       setUploading(true);
+      setUploadProgress(0);
+      
       const croppedImageUrl = await getCroppedImgCircle(
         imageSrc,
         croppedAreaPixels
@@ -195,30 +199,60 @@ export default function AvatarUpload({
       const blob = await response.blob();
       const file = new File([blob], "avatar.png", { type: "image/png" });
 
-      // Upload to Cloudinary
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", folder);
+      // Upload to Cloudinary with progress tracking
+      await new Promise<void>((resolve, reject) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("folder", folder);
 
-      const uploadResponse = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
+        const xhr = new XMLHttpRequest();
+
+        // Track upload progress
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = (e.loaded / e.total) * 100;
+            setUploadProgress(percentComplete);
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status === 200) {
+            try {
+              const uploadData = JSON.parse(xhr.responseText);
+              if (uploadData.success) {
+                setUploadProgress(100);
+                onChange(uploadData.data.url);
+                setShowCropModal(false);
+                setImageSrc("");
+                resolve();
+              } else {
+                reject(new Error(uploadData.error || "Failed to upload avatar"));
+              }
+            } catch (error: any) {
+              reject(new Error(error.message || "Failed to parse response"));
+            }
+          } else {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener("error", () => {
+          reject(new Error("Network error during upload"));
+        });
+
+        xhr.addEventListener("abort", () => {
+          reject(new Error("Upload was aborted"));
+        });
+
+        xhr.open("POST", "/api/upload");
+        xhr.send(formData);
       });
-
-      const uploadData = await uploadResponse.json();
-
-      if (uploadData.success) {
-        onChange(uploadData.data.url);
-        setShowCropModal(false);
-        setImageSrc("");
-      } else {
-        alert(uploadData.error || "Failed to upload avatar");
-      }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error cropping/uploading image:", error);
-      alert("Failed to process image");
+      alert(`Failed to process image: ${error.message}`);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -334,6 +368,14 @@ export default function AvatarUpload({
                 className="w-full"
               />
             </div>
+            {uploading && (
+              <div className="mt-4">
+                <ProgressBar
+                  progress={uploadProgress}
+                  label="Uploading avatar..."
+                />
+              </div>
+            )}
             <div className="flex gap-3 justify-end mt-6">
               <Button
                 type="button"

@@ -4,6 +4,7 @@ import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import Image from "next/image";
 import { TrashBinIcon } from "@/icons";
+import ProgressBar from "@/components/ui/ProgressBar";
 
 interface ImageUploadProps {
   images: string[];
@@ -21,33 +22,54 @@ export default function ImageUpload({
   label = "Upload Images",
 }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [currentFileName, setCurrentFileName] = useState<string>("");
 
-  const uploadImage = async (file: File, index: number) => {
-    try {
-      setUploading(true);
+  const uploadImage = async (file: File, index: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("folder", folder);
 
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
+      const xhr = new XMLHttpRequest();
+
+      // Track upload progress
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          setUploadProgress(percentComplete);
+        }
       });
 
-      const data = await response.json();
+      xhr.addEventListener("load", () => {
+        if (xhr.status === 200) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (data.success) {
+              setUploadProgress(100);
+              resolve(data.data.url);
+            } else {
+              throw new Error(data.error || "Failed to upload image");
+            }
+          } catch (error: any) {
+            reject(new Error(error.message || "Failed to parse response"));
+          }
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      });
 
-      if (!data.success) {
-        throw new Error(data.error || "Failed to upload image");
-      }
+      xhr.addEventListener("error", () => {
+        reject(new Error("Network error during upload"));
+      });
 
-      return data.data.url;
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      alert(`Failed to upload image: ${error.message}`);
-      throw error;
-    } finally {
-      setUploading(false);
-    }
+      xhr.addEventListener("abort", () => {
+        reject(new Error("Upload was aborted"));
+      });
+
+      xhr.open("POST", "/api/upload");
+      xhr.send(formData);
+    });
   };
 
   const onDrop = useCallback(
@@ -57,15 +79,25 @@ export default function ImageUpload({
         return;
       }
 
+      setUploading(true);
+      setUploadProgress(0);
+
       const newImages: string[] = [];
       for (let i = 0; i < acceptedFiles.length; i++) {
         try {
+          setCurrentFileName(acceptedFiles[i].name);
+          setUploadProgress(0);
           const url = await uploadImage(acceptedFiles[i], images.length + i);
           newImages.push(url);
-        } catch (error) {
-          // Error already handled in uploadImage
+        } catch (error: any) {
+          console.error("Upload error:", error);
+          alert(`Failed to upload ${acceptedFiles[i].name}: ${error.message}`);
         }
       }
+
+      setUploading(false);
+      setUploadProgress(0);
+      setCurrentFileName("");
 
       if (newImages.length > 0) {
         onChange([...images, ...newImages]);
@@ -125,40 +157,50 @@ export default function ImageUpload({
 
       {/* Upload Zone */}
       {images.length < maxImages && (
-        <div
-          {...getRootProps()}
-          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-            isDragActive
-              ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20"
-              : "border-gray-300 dark:border-gray-700 hover:border-brand-400"
-          } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
-        >
-          <input {...getInputProps()} />
-          <div className="flex flex-col items-center">
-            <svg
-              className="w-12 h-12 text-gray-400 mb-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {uploading
-                ? "Uploading..."
-                : isDragActive
-                ? "Drop images here"
-                : "Drag & drop images here, or click to select"}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-              PNG, JPG, WEBP (max {maxImages - images.length} more)
-            </p>
+        <div>
+          <div
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              isDragActive
+                ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20"
+                : "border-gray-300 dark:border-gray-700 hover:border-brand-400"
+            } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <input {...getInputProps()} />
+            <div className="flex flex-col items-center">
+              <svg
+                className="w-12 h-12 text-gray-400 mb-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                />
+              </svg>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {uploading
+                  ? `Uploading ${currentFileName || "image"}...`
+                  : isDragActive
+                  ? "Drop images here"
+                  : "Drag & drop images here, or click to select"}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                PNG, JPG, WEBP (max {maxImages - images.length} more)
+              </p>
+            </div>
           </div>
+          {uploading && (
+            <div className="mt-4">
+              <ProgressBar
+                progress={uploadProgress}
+                label={currentFileName || "Uploading..."}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
