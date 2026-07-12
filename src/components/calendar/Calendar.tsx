@@ -240,13 +240,9 @@ const Calendar: React.FC = () => {
     if (!formData.roomId) errors.roomId = "Room is required";
     if (!formData.customerName.trim())
       errors.customerName = "Customer name is required";
-    if (!formData.customerEmail.trim()) {
-      errors.customerEmail = "Customer email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail)) {
+    if (formData.customerEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail)) {
       errors.customerEmail = "Invalid email format";
     }
-    if (!formData.customerPhone.trim())
-      errors.customerPhone = "Customer phone is required";
     if (!formData.checkIn) errors.checkIn = "Check-in date is required";
     if (!formData.checkOut) errors.checkOut = "Check-out date is required";
     if (formData.checkIn && formData.checkOut) {
@@ -347,8 +343,8 @@ const Calendar: React.FC = () => {
     setFormData({
       roomId: typeof selectedBooking.roomId === "object" && selectedBooking.roomId ? selectedBooking.roomId._id : String(selectedBooking.roomId),
       customerName: selectedBooking.customerName,
-      customerEmail: selectedBooking.customerEmail,
-      customerPhone: selectedBooking.customerPhone,
+      customerEmail: selectedBooking.customerEmail || "",
+      customerPhone: selectedBooking.customerPhone || "",
       checkIn: formatLocalDate(selectedBooking.checkIn),
       checkOut: formatLocalDate(selectedBooking.checkOut),
       numberOfGuests: String(selectedBooking.numberOfGuests),
@@ -617,7 +613,7 @@ const Calendar: React.FC = () => {
               {/* Customer Email */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Customer Email *
+                  Customer Email
                 </label>
                 <input
                   type="email"
@@ -635,7 +631,7 @@ const Calendar: React.FC = () => {
               {/* Customer Phone */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Customer Phone *
+                  Customer Phone
                 </label>
                 <input
                   type="tel"

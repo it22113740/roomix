@@ -185,12 +185,8 @@ export default function EditBookingPage() {
     if (!formData.roomId) newErrors.roomId = "Room selection is required";
     if (!formData.customerName.trim())
       newErrors.customerName = "Customer name is required";
-    if (!formData.customerEmail.trim())
-      newErrors.customerEmail = "Customer email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail))
+    if (formData.customerEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail))
       newErrors.customerEmail = "Invalid email format";
-    if (!formData.customerPhone.trim())
-      newErrors.customerPhone = "Customer phone is required";
     if (!formData.checkIn) newErrors.checkIn = "Check-in date is required";
     if (!formData.checkOut) newErrors.checkOut = "Check-out date is required";
     if (formData.checkIn && formData.checkOut) {
@@ -368,7 +364,7 @@ export default function EditBookingPage() {
             </div>
 
             <div>
-              <Label htmlFor="customerEmail">Customer Email *</Label>
+              <Label htmlFor="customerEmail">Customer Email</Label>
               <Input
                 id="customerEmail"
                 name="customerEmail"
@@ -382,7 +378,7 @@ export default function EditBookingPage() {
             </div>
 
             <div>
-              <Label htmlFor="customerPhone">Customer Phone *</Label>
+              <Label htmlFor="customerPhone">Customer Phone</Label>
               <Input
                 id="customerPhone"
                 name="customerPhone"

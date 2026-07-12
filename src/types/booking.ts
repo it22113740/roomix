@@ -4,8 +4,8 @@ export interface Booking {
   roomId: string | { _id: string; roomNumber: string; roomType: string; price: number };
   roomNumber: string;
   customerName: string;
-  customerEmail: string;
-  customerPhone: string;
+  customerEmail?: string;
+  customerPhone?: string;
   checkIn: string | Date;
   checkOut: string | Date;
   numberOfGuests: number;

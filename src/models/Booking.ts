@@ -5,8 +5,8 @@ export interface IBooking extends Document {
   roomId: mongoose.Types.ObjectId;
   roomNumber: string;
   customerName: string;
-  customerEmail: string;
-  customerPhone: string;
+  customerEmail?: string;
+  customerPhone?: string;
   checkIn: Date;
   checkOut: Date;
   numberOfGuests: number;
@@ -47,17 +47,18 @@ const BookingSchema: Schema = new Schema(
     },
     customerEmail: {
       type: String,
-      required: [true, "Customer email is required"],
       trim: true,
       lowercase: true,
-      match: [
-        /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-        "Please enter a valid email",
-      ],
+      validate: {
+        validator: function (v: string) {
+          if (!v) return true;
+          return /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(v);
+        },
+        message: "Please enter a valid email",
+      },
     },
     customerPhone: {
       type: String,
-      required: [true, "Customer phone is required"],
       trim: true,
     },
     checkIn: {

@@ -1,5 +1,13 @@
 import mongoose from "mongoose";
 
+// Register all schemas to prevent "Schema hasn't been registered" error in serverless environments
+import "@/models/User";
+import "@/models/Hotel";
+import "@/models/RoomType";
+import "@/models/Room";
+import "@/models/Booking";
+import "@/models/Amenity";
+
 const MONGODB_URI = process.env.MONGODB_URI || "";
 
 if (!MONGODB_URI) {
