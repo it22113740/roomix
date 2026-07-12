@@ -31,8 +31,9 @@ export default function AddBookingPage() {
     numberOfGuests: "",
     specialRequests: "",
     status: "confirmed" as Booking["status"],
+    discountType: "none" as "percentage" | "fixed" | "none",
+    discountValue: "0",
   });
-  const [idDocument, setIdDocument] = useState<string | undefined>(undefined);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [calculatedPrice, setCalculatedPrice] = useState<number>(0);
   const [loading, setLoading] = useState(false);
@@ -66,7 +67,15 @@ export default function AddBookingPage() {
             (1000 * 60 * 60 * 24)
         );
         if (nights > 0) {
-          setCalculatedPrice(selectedRoom.price * nights);
+          const basePrice = selectedRoom.price * nights;
+          let finalPrice = basePrice;
+          const discVal = parseFloat(formData.discountValue) || 0;
+          if (formData.discountType === "percentage") {
+            finalPrice = basePrice * (1 - discVal / 100);
+          } else if (formData.discountType === "fixed") {
+            finalPrice = basePrice - discVal;
+          }
+          setCalculatedPrice(Math.max(0, finalPrice));
         } else {
           setCalculatedPrice(0);
         }
@@ -74,7 +83,7 @@ export default function AddBookingPage() {
     } else {
       setCalculatedPrice(0);
     }
-  }, [formData.roomId, formData.checkIn, formData.checkOut, rooms]);
+  }, [formData.roomId, formData.checkIn, formData.checkOut, formData.discountType, formData.discountValue, rooms]);
 
   const roomOptions = rooms.map((room) => ({
     value: room._id || room.id || "",
@@ -95,7 +104,13 @@ export default function AddBookingPage() {
   };
 
   const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === "discountType" && value === "none") {
+        next.discountValue = "0";
+      }
+      return next;
+    });
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
@@ -136,6 +151,17 @@ export default function AddBookingPage() {
     }
     if (!formData.numberOfGuests || parseInt(formData.numberOfGuests) <= 0)
       newErrors.numberOfGuests = "Valid number of guests is required";
+    if (formData.discountType === "percentage") {
+      const val = parseFloat(formData.discountValue);
+      if (isNaN(val) || val < 0 || val > 100) {
+        newErrors.discountValue = "Percentage must be between 0 and 100";
+      }
+    } else if (formData.discountType === "fixed") {
+      const val = parseFloat(formData.discountValue);
+      if (isNaN(val) || val < 0) {
+        newErrors.discountValue = "Discount value cannot be negative";
+      }
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -163,7 +189,8 @@ export default function AddBookingPage() {
         totalPrice: calculatedPrice,
         status: formData.status,
         specialRequests: formData.specialRequests || undefined,
-        idDocument: idDocument,
+        discountType: formData.discountType,
+        discountValue: parseFloat(formData.discountValue) || 0,
       });
 
       setShowSuccess(true);
@@ -312,13 +339,51 @@ export default function AddBookingPage() {
                 />
               </div>
 
+              {/* Discount Type */}
+              <div>
+                <Label htmlFor="discountType">Discount Type</Label>
+                <Select
+                  options={[
+                    { value: "none", label: "No Discount" },
+                    { value: "percentage", label: "Percentage (%)" },
+                    { value: "fixed", label: "Fixed Amount (LKR)" },
+                  ]}
+                  placeholder="Select discount type"
+                  onChange={(value) => handleSelectChange("discountType", value)}
+                  defaultValue={formData.discountType}
+                />
+              </div>
+
+              {/* Discount Value */}
+              {formData.discountType !== "none" && (
+                <div>
+                  <Label htmlFor="discountValue">
+                    {formData.discountType === "percentage"
+                      ? "Discount Percentage (%)"
+                      : "Discount Value (LKR)"}
+                  </Label>
+                  <Input
+                    id="discountValue"
+                    name="discountValue"
+                    type="number"
+                    placeholder="0"
+                    min="0"
+                    max={formData.discountType === "percentage" ? "100" : undefined}
+                    value={formData.discountValue}
+                    onChange={handleChange}
+                    error={!!errors.discountValue}
+                    hint={errors.discountValue}
+                  />
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="totalPrice">Total Price</Label>
                 <Input
                   id="totalPrice"
                   name="totalPrice"
                   type="text"
-                  value={`LKR ${calculatedPrice.toFixed(2)}`}
+                  value={`LKR ${calculatedPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                   disabled
                   className="bg-gray-100 dark:bg-gray-800"
                 />
@@ -332,21 +397,6 @@ export default function AddBookingPage() {
                 rows={3}
                 value={formData.specialRequests}
                 onChange={handleTextAreaChange}
-              />
-            </div>
-
-            <div>
-              <SingleImageUpload
-                image={idDocument}
-                onChange={setIdDocument}
-                folder="bookings/id-documents"
-                label="NIC / Driver License Document"
-                accept={{
-                  "image/png": [".png"],
-                  "image/jpeg": [".jpg", ".jpeg"],
-                  "image/webp": [".webp"],
-                  "application/pdf": [".pdf"],
-                }}
               />
             </div>
 

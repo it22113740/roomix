@@ -12,6 +12,7 @@ interface SingleImageUploadProps {
   folder?: string;
   label?: string;
   accept?: Record<string, string[]>;
+  onUploading?: (uploading: boolean) => void;
 }
 
 export default function SingleImageUpload({
@@ -25,6 +26,7 @@ export default function SingleImageUpload({
     "image/webp": [".webp"],
     "application/pdf": [".pdf"],
   },
+  onUploading,
 }: SingleImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -83,6 +85,7 @@ export default function SingleImageUpload({
 
       try {
         setUploading(true);
+        if (onUploading) onUploading(true);
         setUploadProgress(0);
         setCurrentFileName(acceptedFiles[0].name);
         const url = await uploadImage(acceptedFiles[0]);
@@ -92,11 +95,12 @@ export default function SingleImageUpload({
         alert(`Failed to upload: ${error.message}`);
       } finally {
         setUploading(false);
+        if (onUploading) onUploading(false);
         setUploadProgress(0);
         setCurrentFileName("");
       }
     },
-    [folder, onChange]
+    [folder, onChange, onUploading]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

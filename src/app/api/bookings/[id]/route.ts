@@ -241,6 +241,11 @@ export async function PUT(
     if (body.numberOfGuests !== undefined) updateData.numberOfGuests = body.numberOfGuests;
     if (body.totalPrice !== undefined) updateData.totalPrice = body.totalPrice;
     if (body.status !== undefined) updateData.status = body.status;
+    if (body.bookingSource !== undefined) updateData.bookingSource = body.bookingSource;
+    if (body.websiteUrl !== undefined) updateData.websiteUrl = body.websiteUrl;
+    if (body.checkedInAt !== undefined) updateData.checkedInAt = body.checkedInAt;
+    if (body.discountType !== undefined) updateData.discountType = body.discountType;
+    if (body.discountValue !== undefined) updateData.discountValue = body.discountValue;
     if (body.specialRequests !== undefined) updateData.specialRequests = body.specialRequests;
     if (body.idDocument !== undefined) updateData.idDocument = body.idDocument;
     

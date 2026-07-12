@@ -14,6 +14,11 @@ export interface IBooking extends Document {
   status: "confirmed" | "reserved" | "cancelled" | "completed";
   specialRequests?: string;
   idDocument?: string; // Cloudinary URL for NIC/Driver License
+  bookingSource?: "manual" | "website" | "call";
+  websiteUrl?: string;
+  checkedInAt?: Date;
+  discountType?: "percentage" | "fixed" | "none";
+  discountValue?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -97,6 +102,26 @@ const BookingSchema: Schema = new Schema(
       enum: ["confirmed", "reserved", "cancelled", "completed"],
       default: "confirmed",
     },
+    bookingSource: {
+      type: String,
+      enum: ["manual", "website", "call"],
+      default: "call",
+      required: [true, "Booking source is required"],
+    },
+    websiteUrl: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: function (this: any, value: string) {
+          const bookingSource = this.bookingSource || (this as any).get("bookingSource");
+          if (bookingSource === "website") {
+            return typeof value === "string" && value.trim().length > 0;
+          }
+          return true;
+        },
+        message: "Website URL is required for website bookings",
+      },
+    },
     specialRequests: {
       type: String,
       trim: true,
@@ -104,6 +129,19 @@ const BookingSchema: Schema = new Schema(
     idDocument: {
       type: String,
       trim: true,
+    },
+    checkedInAt: {
+      type: Date,
+    },
+    discountType: {
+      type: String,
+      enum: ["percentage", "fixed", "none"],
+      default: "none",
+    },
+    discountValue: {
+      type: Number,
+      default: 0,
+      min: [0, "Discount value cannot be negative"],
     },
   },
   {

@@ -19,6 +19,8 @@ import {
 import { PlusIcon, PencilIcon, TrashBinIcon, DownloadIcon } from "@/icons";
 import TableSkeleton from "@/components/ui/skeleton/TableSkeleton";
 import { getHotel } from "@/lib/hotel-context";
+import { Modal } from "@/components/ui/modal";
+import SingleImageUpload from "@/components/form/SingleImageUpload";
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -34,6 +36,32 @@ export default function BookingsPage() {
     customerName: "",
   });
   const [cancelling, setCancelling] = useState(false);
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [checkInModal, setCheckInModal] = useState<{
+    isOpen: boolean;
+    bookingId: string | null;
+    customerName: string;
+    currentTime: string;
+  }>({
+    isOpen: false,
+    bookingId: null,
+    customerName: "",
+    currentTime: "",
+  });
+  const [idDocument, setIdDocument] = useState<string | undefined>(undefined);
+  const [checkingIn, setCheckingIn] = useState(false);
+
+  const [viewDocsModal, setViewDocsModal] = useState<{
+    isOpen: boolean;
+    checkedInAt: string | Date | null;
+    idDocument: string | null;
+    customerName: string;
+  }>({
+    isOpen: false,
+    checkedInAt: null,
+    idDocument: null,
+    customerName: "",
+  });
 
   useEffect(() => {
     loadBookings();
@@ -79,6 +107,53 @@ export default function BookingsPage() {
 
   const handleCancelClose = () => {
     setCancelModal({ isOpen: false, bookingId: null, customerName: "" });
+  };
+
+  const handleCheckInClick = (id: string, customerName: string) => {
+    setIdDocument(undefined);
+    setCheckInModal({
+      isOpen: true,
+      bookingId: id,
+      customerName: customerName,
+      currentTime: new Date().toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      }),
+    });
+  };
+
+  const handleCheckInSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkInModal.bookingId) return;
+    if (!idDocument) {
+      alert("Please upload the NIC / Driver License Document first.");
+      return;
+    }
+
+    try {
+      setCheckingIn(true);
+      await bookingAPI.update(checkInModal.bookingId, {
+        checkedInAt: new Date().toISOString(),
+        idDocument: idDocument,
+      });
+      setCheckInModal({ isOpen: false, bookingId: null, customerName: "", currentTime: "" });
+      loadBookings();
+    } catch (err: any) {
+      alert(err.message || "Failed to submit check-in");
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  const handleViewDocsClick = (booking: Booking) => {
+    setViewDocsModal({
+      isOpen: true,
+      checkedInAt: booking.checkedInAt || null,
+      idDocument: booking.idDocument || null,
+      customerName: booking.customerName,
+    });
   };
 
   const getStatusBadge = (status: Booking["status"]) => {
@@ -462,6 +537,27 @@ export default function BookingsPage() {
                         </TableCell>
                         <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
                           <div className="flex items-center gap-2">
+                            {booking.checkedInAt ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleViewDocsClick(booking)}
+                                className="text-brand-500 hover:text-brand-600 font-semibold shrink-0"
+                              >
+                                View Docs
+                              </Button>
+                            ) : (
+                              (booking.status === "confirmed" || booking.status === "reserved") && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleCheckInClick(String(bookingId), booking.customerName)}
+                                  className="text-success-600 hover:text-success-700 font-semibold shrink-0"
+                                >
+                                  Check In
+                                </Button>
+                              )
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
@@ -512,6 +608,145 @@ export default function BookingsPage() {
         variant="warning"
         loading={cancelling}
       />
+
+      {/* Check-In Modal */}
+      <Modal
+        isOpen={checkInModal.isOpen}
+        onClose={() => setCheckInModal({ ...checkInModal, isOpen: false })}
+        className="max-w-[500px] p-6 lg:p-8"
+      >
+        <form onSubmit={handleCheckInSubmit} className="space-y-6">
+          <div>
+            <h5 className="mb-2 font-semibold text-gray-800 text-theme-xl dark:text-white/90 lg:text-2xl">
+              Guest Check-In
+            </h5>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Checking in <strong>{checkInModal.customerName}</strong>. Please upload the required verification document.
+            </p>
+          </div>
+
+          <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Current Check-In Time</p>
+            <p className="text-sm font-semibold text-gray-800 dark:text-white/90">{checkInModal.currentTime}</p>
+          </div>
+
+          <div>
+            <SingleImageUpload
+              image={idDocument}
+              onChange={setIdDocument}
+              onUploading={setDocumentUploading}
+              folder="bookings/id-documents"
+              label="NIC / Driver License Document *"
+              accept={{
+                "image/png": [".png"],
+                "image/jpeg": [".jpg", ".jpeg"],
+                "image/webp": [".webp"],
+                "application/pdf": [".pdf"],
+              }}
+            />
+            <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+              Maximum file size limit: 10 MB. Accepted formats: PNG, JPG, WEBP, PDF.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-gray-800 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCheckInModal({ ...checkInModal, isOpen: false })}
+              disabled={checkingIn || documentUploading}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={checkingIn || documentUploading}>
+              {documentUploading ? "Uploading document..." : (checkingIn ? "Saving..." : "Submit Check-In")}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* View Docs Modal */}
+      <Modal
+        isOpen={viewDocsModal.isOpen}
+        onClose={() => setViewDocsModal({ ...viewDocsModal, isOpen: false })}
+        className="max-w-[600px] p-6 lg:p-8"
+      >
+        <div className="space-y-6">
+          <div>
+            <h5 className="mb-2 font-semibold text-gray-800 text-theme-xl dark:text-white/90 lg:text-2xl">
+              Verification Documents
+            </h5>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Submitted documents for guest <strong>{viewDocsModal.customerName}</strong>.
+            </p>
+          </div>
+
+          <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2">
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Check-In Time</p>
+            <p className="text-sm font-semibold text-gray-800 dark:text-white/90">
+              {viewDocsModal.checkedInAt
+                ? new Date(viewDocsModal.checkedInAt).toLocaleTimeString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: true,
+                  })
+                : "N/A"}
+            </p>
+          </div>
+
+          <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-2 bg-gray-50 dark:bg-gray-900/10 flex justify-center w-full">
+            {viewDocsModal.idDocument ? (
+              viewDocsModal.idDocument.toLowerCase().endsWith(".pdf") ? (
+                <div className="py-8 text-center space-y-3 w-full">
+                  <svg className="w-12 h-12 text-error-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                  </svg>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Verification document uploaded as PDF.</p>
+                  <a
+                    href={viewDocsModal.idDocument}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600"
+                  >
+                    Open PDF Document
+                  </a>
+                </div>
+              ) : (
+                <div className="relative group w-full text-center">
+                  <img
+                    src={viewDocsModal.idDocument}
+                    alt="ID Document"
+                    className="max-h-[380px] rounded-lg shadow-sm mx-auto object-contain"
+                  />
+                  <div className="mt-4 flex justify-center gap-2">
+                    <a
+                      href={viewDocsModal.idDocument}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                    >
+                      Open in New Tab
+                    </a>
+                  </div>
+                </div>
+              )
+            ) : (
+              <p className="text-sm text-gray-500 py-8">No document uploaded.</p>
+            )}
+          </div>
+
+          <div className="flex justify-end border-t border-gray-200 dark:border-gray-800 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setViewDocsModal({ ...viewDocsModal, isOpen: false })}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -11,6 +11,11 @@ export interface Booking {
   numberOfGuests: number;
   totalPrice: number;
   status: "confirmed" | "reserved" | "cancelled" | "completed";
+  bookingSource?: "manual" | "website" | "call";
+  websiteUrl?: string;
+  checkedInAt?: string | Date;
+  discountType?: "percentage" | "fixed" | "none";
+  discountValue?: number;
   specialRequests?: string;
   idDocument?: string; // Cloudinary URL for NIC/Driver License
   createdAt?: string | Date;
