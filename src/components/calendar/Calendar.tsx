@@ -18,6 +18,12 @@ import { Booking } from "@/types/booking";
 import { Room } from "@/types/room";
 import Badge from "@/components/ui/badge/Badge";
 import DatePicker from "@/components/form/date-picker";
+import MultiSelect from "@/components/form/MultiSelect";
+import {
+  formatBookingEventTitle,
+  formatBookingRoomsLabel,
+  getBookingRoomIds,
+} from "@/lib/booking-rooms";
 
 const formatLocalDate = (dateInput: string | Date | undefined) => {
   if (!dateInput) return "";
@@ -53,7 +59,7 @@ const Calendar: React.FC = () => {
 
   // Form state for adding manual booking
   const [formData, setFormData] = useState({
-    roomId: "",
+    roomIds: [] as string[],
     customerName: "",
     customerEmail: "",
     customerPhone: "",
@@ -76,19 +82,22 @@ const Calendar: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (formData.roomId && formData.checkIn && formData.checkOut) {
-      const selectedRoom = rooms.find(
-        (r) => (r._id || r.id) === formData.roomId
+    if (formData.roomIds.length > 0 && formData.checkIn && formData.checkOut) {
+      const selectedRooms = rooms.filter((r) =>
+        formData.roomIds.includes(String(r._id || r.id))
       );
-      if (selectedRoom) {
+      if (selectedRooms.length > 0) {
         const checkInDate = new Date(formData.checkIn);
         const checkOutDate = new Date(formData.checkOut);
         const nights = Math.ceil(
           (checkOutDate.getTime() - checkInDate.getTime()) /
-          (1000 * 60 * 60 * 24)
+            (1000 * 60 * 60 * 24)
         );
         if (nights > 0) {
-          const basePrice = selectedRoom.price * nights;
+          const basePrice = selectedRooms.reduce(
+            (sum, room) => sum + room.price * nights,
+            0
+          );
           let finalPrice = basePrice;
           const discVal = parseFloat(formData.discountValue) || 0;
           if (formData.discountType === "percentage") {
@@ -100,11 +109,20 @@ const Calendar: React.FC = () => {
         } else {
           setCalculatedPrice(0);
         }
+      } else {
+        setCalculatedPrice(0);
       }
     } else {
       setCalculatedPrice(0);
     }
-  }, [formData.roomId, formData.checkIn, formData.checkOut, formData.discountType, formData.discountValue, rooms]);
+  }, [
+    formData.roomIds,
+    formData.checkIn,
+    formData.checkOut,
+    formData.discountType,
+    formData.discountValue,
+    rooms,
+  ]);
 
   const loadData = async () => {
     try {
@@ -129,7 +147,7 @@ const Calendar: React.FC = () => {
 
         return {
           id: b._id || b.id,
-          title: `Room ${b.roomNumber} - ${b.customerName}`,
+          title: formatBookingEventTitle(b),
           start: startStr,
           end: endStr,
           allDay: true,
@@ -151,7 +169,7 @@ const Calendar: React.FC = () => {
     setModalMode("add");
     setFormErrors({});
     setFormData({
-      roomId: "",
+      roomIds: [],
       customerName: "",
       customerEmail: "",
       customerPhone: "",
@@ -194,7 +212,7 @@ const Calendar: React.FC = () => {
     };
 
     setFormData({
-      roomId: "",
+      roomIds: [],
       customerName: "",
       customerEmail: "",
       customerPhone: "",
@@ -237,7 +255,8 @@ const Calendar: React.FC = () => {
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!formData.roomId) errors.roomId = "Room is required";
+    if (formData.roomIds.length === 0)
+      errors.roomIds = "Select at least one room";
     if (!formData.customerName.trim())
       errors.customerName = "Customer name is required";
     if (formData.customerEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail)) {
@@ -286,16 +305,16 @@ const Calendar: React.FC = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const selectedRoom = rooms.find(
-      (r) => (r._id || r.id) === formData.roomId
+    const selectedRooms = rooms.filter((r) =>
+      formData.roomIds.includes(String(r._id || r.id))
     );
-    if (!selectedRoom) return;
+    if (selectedRooms.length === 0) return;
 
     try {
       setSaving(true);
       await bookingAPI.create({
-        roomId: formData.roomId,
-        roomNumber: selectedRoom.roomNumber,
+        roomIds: formData.roomIds,
+        roomNumbers: selectedRooms.map((r) => r.roomNumber),
         customerName: formData.customerName,
         customerEmail: formData.customerEmail,
         customerPhone: formData.customerPhone,
@@ -341,7 +360,7 @@ const Calendar: React.FC = () => {
     if (!selectedBooking) return;
     setFormErrors({});
     setFormData({
-      roomId: typeof selectedBooking.roomId === "object" && selectedBooking.roomId ? selectedBooking.roomId._id : String(selectedBooking.roomId),
+      roomIds: getBookingRoomIds(selectedBooking),
       customerName: selectedBooking.customerName,
       customerEmail: selectedBooking.customerEmail || "",
       customerPhone: selectedBooking.customerPhone || "",
@@ -363,17 +382,17 @@ const Calendar: React.FC = () => {
     e.preventDefault();
     if (!selectedBooking || !validateForm()) return;
 
-    const selectedRoom = rooms.find(
-      (r) => (r._id || r.id) === formData.roomId
+    const selectedRooms = rooms.filter((r) =>
+      formData.roomIds.includes(String(r._id || r.id))
     );
-    if (!selectedRoom) return;
+    if (selectedRooms.length === 0) return;
 
     try {
       setSaving(true);
       const bookingId = String(selectedBooking._id || selectedBooking.id);
       await bookingAPI.update(bookingId, {
-        roomId: formData.roomId,
-        roomNumber: selectedRoom.roomNumber,
+        roomIds: formData.roomIds,
+        roomNumbers: selectedRooms.map((r) => r.roomNumber),
         customerName: formData.customerName,
         customerEmail: formData.customerEmail,
         customerPhone: formData.customerPhone,
@@ -547,32 +566,34 @@ const Calendar: React.FC = () => {
               </h5>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {modalMode === "add"
-                  ? "Book a room manually for a customer. Make sure to specify the booking source and details."
+                  ? "Book one or more rooms for a customer. Same dates and guest total apply to the whole booking."
                   : "Modify the details of this booking. Automatically recalculates stay pricing on date or room changes."}
               </p>
             </div>
 
             <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
-              {/* Select Room */}
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Select Room *
-                </label>
-                <select
-                  name="roomId"
-                  value={formData.roomId}
-                  onChange={handleInputChange}
-                  className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                >
-                  <option value="" className="dark:bg-gray-900 text-gray-400">Select Room</option>
-                  {rooms.map((room) => (
-                    <option key={room._id || room.id} value={room._id || room.id} className="dark:bg-gray-900">
-                      Room {room.roomNumber} - {room.roomType} (LKR {room.price}/night)
-                    </option>
-                  ))}
-                </select>
-                {formErrors.roomId && (
-                  <p className="mt-1 text-xs text-error-500">{formErrors.roomId}</p>
+              {/* Select Rooms */}
+              <div className="sm:col-span-2">
+                <MultiSelect
+                  label="Select Rooms *"
+                  options={rooms.map((room) => ({
+                    value: String(room._id || room.id || ""),
+                    text: `Room ${room.roomNumber} - ${room.roomType} (LKR ${room.price}/night)`,
+                    selected: formData.roomIds.includes(
+                      String(room._id || room.id || "")
+                    ),
+                  }))}
+                  value={formData.roomIds}
+                  onChange={(selected) => {
+                    setFormData((prev) => ({ ...prev, roomIds: selected }));
+                    if (formErrors.roomIds) {
+                      setFormErrors((prev) => ({ ...prev, roomIds: "" }));
+                    }
+                  }}
+                  placeholder="Select one or more rooms"
+                />
+                {formErrors.roomIds && (
+                  <p className="mt-1 text-xs text-error-500">{formErrors.roomIds}</p>
                 )}
               </div>
 
@@ -907,11 +928,13 @@ const Calendar: React.FC = () => {
                   <div>
                     <h6 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Room Details</h6>
                     <div className="space-y-1.5">
-                      <p className="text-sm font-semibold text-gray-800 dark:text-white/90">Room Number: {selectedBooking.roomNumber}</p>
+                      <p className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                        Room{getBookingRoomIds(selectedBooking).length > 1 ? "s" : ""}:{" "}
+                        {formatBookingRoomsLabel(selectedBooking)}
+                      </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {typeof selectedBooking.roomId === "object" && selectedBooking.roomId
-                          ? `${(selectedBooking.roomId as any).roomType || ""}`
-                          : "Room details cached"}
+                        {getBookingRoomIds(selectedBooking).length} room
+                        {getBookingRoomIds(selectedBooking).length === 1 ? "" : "s"} in this booking
                       </p>
                     </div>
                   </div>

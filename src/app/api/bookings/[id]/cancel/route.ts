@@ -2,17 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Booking from "@/models/Booking";
 import mongoose from "mongoose";
-
-// Helper to serialize booking
-const serializeBooking = (booking: any) => ({
-  ...booking,
-  _id: booking._id.toString(),
-  id: booking._id.toString(),
-  hotel: booking.hotel?.toString() || booking.hotel,
-  roomId: typeof booking.roomId === "object" && booking.roomId?._id
-    ? booking.roomId._id.toString()
-    : booking.roomId?.toString() || booking.roomId,
-});
+import { serializeBooking } from "@/lib/booking-api";
 
 // PATCH cancel booking
 export async function PATCH(
@@ -50,6 +40,7 @@ export async function PATCH(
       { status: "cancelled", updatedAt: new Date() },
       { new: true }
     )
+      .populate("roomIds", "roomNumber roomType price")
       .populate("roomId", "roomNumber roomType price")
       .lean();
 

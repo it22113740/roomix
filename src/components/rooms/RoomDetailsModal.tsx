@@ -15,6 +15,7 @@ import { Room } from "@/types/room";
 import { Booking } from "@/types/booking";
 import { bookingAPI } from "@/lib/api";
 import Badge from "@/components/ui/badge/Badge";
+import { bookingIncludesRoom } from "@/lib/booking-rooms";
 
 interface RoomDetailsModalProps {
   isOpen: boolean;
@@ -45,14 +46,10 @@ export default function RoomDetailsModal({
       setLoading(true);
       const allBookings = await bookingAPI.getAll();
       // Filter bookings for this specific room
-      const roomBookings = allBookings.filter((booking) => {
-        const bookingRoomId =
-          typeof booking.roomId === "object" && booking.roomId !== null
-            ? (booking.roomId as any)._id || (booking.roomId as any).id
-            : booking.roomId;
-        const currentRoomId = room._id || room.id;
-        return String(bookingRoomId) === String(currentRoomId);
-      });
+      const currentRoomId = String(room._id || room.id || "");
+      const roomBookings = allBookings.filter((booking) =>
+        bookingIncludesRoom(booking, currentRoomId)
+      );
       setBookings(roomBookings);
     } catch (err: any) {
       console.error("Error loading bookings:", err);

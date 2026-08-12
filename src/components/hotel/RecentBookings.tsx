@@ -12,6 +12,7 @@ import Link from "next/link";
 import { bookingAPI } from "@/lib/api";
 import { Booking } from "@/types/booking";
 import TableSkeleton from "../ui/skeleton/TableSkeleton";
+import { formatBookingRoomsLabel } from "@/lib/booking-rooms";
 
 const formatDate = (dateString: string | Date) => {
   const date = typeof dateString === "string" ? new Date(dateString) : dateString;
@@ -112,7 +113,7 @@ export default function RecentBookings() {
                 isHeader
                 className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
               >
-                Room
+                Rooms
               </TableCell>
               <TableCell
                 isHeader
@@ -164,7 +165,7 @@ export default function RecentBookings() {
                       </div>
                     </TableCell>
                     <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
-                      {booking.roomNumber}
+                      {formatBookingRoomsLabel(booking)}
                     </TableCell>
                     <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
                       {formatDate(booking.checkIn)}

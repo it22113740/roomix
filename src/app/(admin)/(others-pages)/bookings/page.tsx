@@ -21,6 +21,7 @@ import TableSkeleton from "@/components/ui/skeleton/TableSkeleton";
 import { getHotel } from "@/lib/hotel-context";
 import { Modal } from "@/components/ui/modal";
 import SingleImageUpload from "@/components/form/SingleImageUpload";
+import { formatBookingRoomsLabel } from "@/lib/booking-rooms";
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -347,8 +348,8 @@ export default function BookingsPage() {
     <div class="section">
       <div class="section-title">BOOKING DETAILS</div>
       <div class="info-row">
-        <span class="label">Room:</span>
-        <span class="value">${booking.roomNumber}</span>
+        <span class="label">Room(s):</span>
+        <span class="value">${formatBookingRoomsLabel(booking)}</span>
       </div>
       <div class="info-row">
         <span class="label">Check In:</span>
@@ -456,7 +457,7 @@ export default function BookingsPage() {
                         isHeader
                         className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                       >
-                        Room
+                        Rooms
                       </TableCell>
                       <TableCell
                         isHeader
@@ -508,7 +509,7 @@ export default function BookingsPage() {
                       return (
                       <TableRow key={bookingId}>
                         <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                          {booking.roomNumber}
+                          {formatBookingRoomsLabel(booking)}
                         </TableCell>
                         <TableCell className="px-4 py-3 text-start">
                           <div>

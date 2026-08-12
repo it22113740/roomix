@@ -7,15 +7,16 @@ import ComponentCard from "@/components/common/ComponentCard";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import Select from "@/components/form/Select";
+import MultiSelect from "@/components/form/MultiSelect";
 import TextArea from "@/components/form/input/TextArea";
 import DatePicker from "@/components/form/date-picker";
 import Button from "@/components/ui/button/Button";
-import SingleImageUpload from "@/components/form/SingleImageUpload";
 import Alert from "@/components/ui/alert/Alert";
 import { bookingAPI, roomAPI } from "@/lib/api";
 import { Room } from "@/types/room";
 import { Booking } from "@/types/booking";
 import { useToast } from "@/context/ToastContext";
+import { getBookingRoomIds } from "@/lib/booking-rooms";
 
 export default function EditBookingPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export default function EditBookingPage() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [formData, setFormData] = useState({
-    roomId: "",
+    roomIds: [] as string[],
     customerName: "",
     customerEmail: "",
     customerPhone: "",
@@ -47,31 +48,22 @@ export default function EditBookingPage() {
       try {
         const foundBooking = await bookingAPI.getById(bookingId);
         setBooking(foundBooking);
-        
-        // Extract roomId - handle both object and string formats
-        let roomId = "";
-        if (typeof foundBooking.roomId === "object" && foundBooking.roomId !== null) {
-          roomId = (foundBooking.roomId as any)._id?.toString() || (foundBooking.roomId as any).id?.toString() || "";
-        } else {
-          roomId = String(foundBooking.roomId || "");
-        }
-        
-        // Format dates
+
         const checkInDate =
           foundBooking.checkIn instanceof Date
             ? foundBooking.checkIn.toISOString().split("T")[0]
             : typeof foundBooking.checkIn === "string"
-            ? foundBooking.checkIn.split("T")[0]
-            : "";
+              ? foundBooking.checkIn.split("T")[0]
+              : "";
         const checkOutDate =
           foundBooking.checkOut instanceof Date
             ? foundBooking.checkOut.toISOString().split("T")[0]
             : typeof foundBooking.checkOut === "string"
-            ? foundBooking.checkOut.split("T")[0]
-            : "";
-        
-        const newFormData = {
-          roomId: roomId,
+              ? foundBooking.checkOut.split("T")[0]
+              : "";
+
+        setFormData({
+          roomIds: getBookingRoomIds(foundBooking),
           customerName: foundBooking.customerName || "",
           customerEmail: foundBooking.customerEmail || "",
           customerPhone: foundBooking.customerPhone || "",
@@ -82,8 +74,7 @@ export default function EditBookingPage() {
           status: foundBooking.status || "confirmed",
           discountType: foundBooking.discountType || "none",
           discountValue: (foundBooking.discountValue || 0).toString(),
-        };
-        setFormData(newFormData);
+        });
         setCalculatedPrice(foundBooking.totalPrice || 0);
       } catch (err: any) {
         console.error("Error loading booking:", err);
@@ -106,11 +97,11 @@ export default function EditBookingPage() {
   }, []);
 
   useEffect(() => {
-    if (formData.roomId && formData.checkIn && formData.checkOut) {
-      const selectedRoom = rooms.find(
-        (r) => (r._id || r.id) === formData.roomId
+    if (formData.roomIds.length > 0 && formData.checkIn && formData.checkOut) {
+      const selectedRooms = rooms.filter((r) =>
+        formData.roomIds.includes(String(r._id || r.id))
       );
-      if (selectedRoom) {
+      if (selectedRooms.length > 0) {
         const checkInDate = new Date(formData.checkIn);
         const checkOutDate = new Date(formData.checkOut);
         const nights = Math.ceil(
@@ -118,7 +109,10 @@ export default function EditBookingPage() {
             (1000 * 60 * 60 * 24)
         );
         if (nights > 0) {
-          const basePrice = selectedRoom.price * nights;
+          const basePrice = selectedRooms.reduce(
+            (sum, room) => sum + room.price * nights,
+            0
+          );
           let finalPrice = basePrice;
           const discVal = parseFloat(formData.discountValue) || 0;
           if (formData.discountType === "percentage") {
@@ -132,11 +126,19 @@ export default function EditBookingPage() {
         }
       }
     }
-  }, [formData.roomId, formData.checkIn, formData.checkOut, formData.discountType, formData.discountValue, rooms]);
+  }, [
+    formData.roomIds,
+    formData.checkIn,
+    formData.checkOut,
+    formData.discountType,
+    formData.discountValue,
+    rooms,
+  ]);
 
   const roomOptions = rooms.map((room) => ({
     value: room._id || room.id || "",
-    label: `${room.roomNumber} - ${room.roomType} (LKR ${room.price}/night)`,
+    text: `${room.roomNumber} - ${room.roomType} (LKR ${room.price}/night)`,
+    selected: formData.roomIds.includes(String(room._id || room.id || "")),
   }));
 
   const statusOptions = [
@@ -167,8 +169,15 @@ export default function EditBookingPage() {
     }
   };
 
+  const handleRoomsChange = (selected: string[]) => {
+    setFormData((prev) => ({ ...prev, roomIds: selected }));
+    if (errors.roomIds) {
+      setErrors((prev) => ({ ...prev, roomIds: "" }));
+    }
+  };
+
   const handleDateChange = (name: string) => {
-    return (selectedDates: Date[], dateStr: string) => {
+    return (_selectedDates: Date[], dateStr: string) => {
       setFormData((prev) => ({ ...prev, [name]: dateStr }));
       if (errors[name]) {
         setErrors((prev) => ({ ...prev, [name]: "" }));
@@ -182,10 +191,14 @@ export default function EditBookingPage() {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.roomId) newErrors.roomId = "Room selection is required";
+    if (formData.roomIds.length === 0)
+      newErrors.roomIds = "Select at least one room";
     if (!formData.customerName.trim())
       newErrors.customerName = "Customer name is required";
-    if (formData.customerEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail))
+    if (
+      formData.customerEmail.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail)
+    )
       newErrors.customerEmail = "Invalid email format";
     if (!formData.checkIn) newErrors.checkIn = "Check-in date is required";
     if (!formData.checkOut) newErrors.checkOut = "Check-out date is required";
@@ -217,16 +230,16 @@ export default function EditBookingPage() {
     e.preventDefault();
     if (!validate() || !booking) return;
 
-    const selectedRoom = rooms.find(
-      (r) => (r._id || r.id) === formData.roomId
+    const selectedRooms = rooms.filter((r) =>
+      formData.roomIds.includes(String(r._id || r.id))
     );
-    if (!selectedRoom) return;
+    if (selectedRooms.length === 0) return;
 
     try {
       setLoading(true);
       await bookingAPI.update(bookingId, {
-        roomId: formData.roomId,
-        roomNumber: selectedRoom.roomNumber,
+        roomIds: formData.roomIds,
+        roomNumbers: selectedRooms.map((r) => r.roomNumber),
         customerName: formData.customerName,
         customerEmail: formData.customerEmail,
         customerPhone: formData.customerPhone,
@@ -277,18 +290,16 @@ export default function EditBookingPage() {
         )}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div>
-              <Label htmlFor="roomId">Select Room *</Label>
-              <Select
-                key={`room-${formData.roomId}`}
+            <div className="md:col-span-2">
+              <MultiSelect
+                label="Select Rooms *"
                 options={roomOptions}
-                placeholder="Select a room"
-                onChange={(value) => handleSelectChange("roomId", value)}
-                value={formData.roomId}
-                defaultValue={formData.roomId}
+                value={formData.roomIds}
+                onChange={handleRoomsChange}
+                placeholder="Select one or more rooms"
               />
-              {errors.roomId && (
-                <p className="mt-1.5 text-xs text-error-500">{errors.roomId}</p>
+              {errors.roomIds && (
+                <p className="mt-1.5 text-xs text-error-500">{errors.roomIds}</p>
               )}
             </div>
 
@@ -391,10 +402,10 @@ export default function EditBookingPage() {
               />
             </div>
 
-            {/* Discount Type */}
             <div>
               <Label htmlFor="discountType">Discount Type</Label>
               <Select
+                key={`discount-${formData.discountType}`}
                 options={[
                   { value: "none", label: "No Discount" },
                   { value: "percentage", label: "Percentage (%)" },
@@ -406,7 +417,6 @@ export default function EditBookingPage() {
               />
             </div>
 
-            {/* Discount Value */}
             {formData.discountType !== "none" && (
               <div>
                 <Label htmlFor="discountValue">
@@ -435,7 +445,9 @@ export default function EditBookingPage() {
                 id="totalPrice"
                 name="totalPrice"
                 type="text"
-                value={`LKR ${calculatedPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                value={`LKR ${calculatedPrice.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                })}`}
                 disabled
                 className="bg-gray-100 dark:bg-gray-800"
               />

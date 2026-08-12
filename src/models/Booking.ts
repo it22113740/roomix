@@ -2,8 +2,12 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IBooking extends Document {
   hotel: mongoose.Types.ObjectId;
-  roomId: mongoose.Types.ObjectId;
-  roomNumber: string;
+  roomIds: mongoose.Types.ObjectId[];
+  roomNumbers: string[];
+  /** @deprecated Use roomIds — kept for reading legacy documents */
+  roomId?: mongoose.Types.ObjectId;
+  /** @deprecated Use roomNumbers — kept for reading legacy documents */
+  roomNumber?: string;
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -13,7 +17,7 @@ export interface IBooking extends Document {
   totalPrice: number;
   status: "confirmed" | "reserved" | "cancelled" | "completed";
   specialRequests?: string;
-  idDocument?: string; // Cloudinary URL for NIC/Driver License
+  idDocument?: string;
   bookingSource?: "manual" | "website" | "call";
   websiteUrl?: string;
   checkedInAt?: Date;
@@ -30,15 +34,36 @@ const BookingSchema: Schema = new Schema(
       ref: "Hotel",
       required: [true, "Hotel is required"],
     },
+    roomIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Room" }],
+      required: [true, "At least one room is required"],
+      validate: {
+        validator: function (rooms: mongoose.Types.ObjectId[]) {
+          return Array.isArray(rooms) && rooms.length > 0;
+        },
+        message: "At least one room is required",
+      },
+    },
+    roomNumbers: {
+      type: [String],
+      required: [true, "Room numbers are required"],
+      validate: {
+        validator: function (numbers: string[]) {
+          return Array.isArray(numbers) && numbers.length > 0;
+        },
+        message: "At least one room number is required",
+      },
+    },
+    // Legacy fields (optional) for older documents
     roomId: {
       type: Schema.Types.ObjectId,
       ref: "Room",
-      required: [true, "Room ID is required"],
+      required: false,
     },
     roomNumber: {
       type: String,
-      required: [true, "Room number is required"],
       trim: true,
+      required: false,
     },
     customerName: {
       type: String,
@@ -70,17 +95,14 @@ const BookingSchema: Schema = new Schema(
       required: [true, "Check-out date is required"],
       validate: {
         validator: function (this: IBooking, value: Date) {
-          // Get checkIn from the document (works for both new and existing documents)
           const checkIn = this.checkIn || (this as any).get("checkIn");
-          if (!checkIn) return true; // Let required validation handle missing checkIn
-          
-          // Normalize both dates to start of day for comparison
+          if (!checkIn) return true;
+
           const checkInDate = new Date(checkIn);
           checkInDate.setHours(0, 0, 0, 0);
           const checkOutDate = new Date(value);
           checkOutDate.setHours(0, 0, 0, 0);
-          
-          // Check if checkOut is at least 1 day after checkIn
+
           const timeDiff = checkOutDate.getTime() - checkInDate.getTime();
           const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
           return daysDiff > 0;
@@ -114,7 +136,8 @@ const BookingSchema: Schema = new Schema(
       trim: true,
       validate: {
         validator: function (this: any, value: string) {
-          const bookingSource = this.bookingSource || (this as any).get("bookingSource");
+          const bookingSource =
+            this.bookingSource || (this as any).get("bookingSource");
           if (bookingSource === "website") {
             return typeof value === "string" && value.trim().length > 0;
           }

@@ -22,6 +22,7 @@ import Image from "next/image";
 import { ChevronLeftIcon } from "@/icons";
 import Link from "next/link";
 import TableSkeleton from "@/components/ui/skeleton/TableSkeleton";
+import { bookingIncludesRoom } from "@/lib/booking-rooms";
 
 export default function RoomViewPage() {
   const router = useRouter();
@@ -61,13 +62,9 @@ export default function RoomViewPage() {
       setBookingsLoading(true);
       const allBookings = await bookingAPI.getAll();
       // Filter bookings for this specific room
-      const roomBookings = allBookings.filter((booking) => {
-        const bookingRoomId =
-          typeof booking.roomId === "object" && booking.roomId !== null
-            ? (booking.roomId as any)._id || (booking.roomId as any).id
-            : booking.roomId;
-        return String(bookingRoomId) === String(roomId);
-      });
+      const roomBookings = allBookings.filter((booking) =>
+        bookingIncludesRoom(booking, roomId)
+      );
       setBookings(roomBookings);
     } catch (err: any) {
       console.error("Error loading bookings:", err);

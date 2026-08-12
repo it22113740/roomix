@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Booking from "@/models/Booking";
+import Room from "@/models/Room";
 import mongoose from "mongoose";
-
-// Helper to serialize booking
-const serializeBooking = (booking: any) => ({
-  ...booking,
-  _id: booking._id.toString(),
-  id: booking._id.toString(),
-  hotel: booking.hotel?.toString() || booking.hotel,
-  roomId: typeof booking.roomId === "object" && booking.roomId?._id
-    ? booking.roomId._id.toString()
-    : booking.roomId?.toString() || booking.roomId,
-});
+import {
+  checkRoomsAvailability,
+  formatDateStr,
+  normalizeRoomIdsInput,
+  parseLocalDate,
+  serializeBooking,
+} from "@/lib/booking-api";
 
 // GET all bookings
 export async function GET(request: NextRequest) {
@@ -28,16 +25,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Convert string hotelId to ObjectId for proper querying
     const hotelObjectId = new mongoose.Types.ObjectId(hotelId);
     const bookings = await Booking.find({ hotel: hotelObjectId })
+      .populate("roomIds", "roomNumber roomType price")
       .populate("roomId", "roomNumber roomType price")
       .sort({ createdAt: -1 })
       .lean();
-    
-    // Convert MongoDB documents to plain objects with string IDs
+
     const serializedBookings = bookings.map(serializeBooking);
-    
+
     return NextResponse.json(
       { success: true, data: serializedBookings },
       { status: 200 }
@@ -50,52 +46,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper function to check for overlapping bookings
-const checkRoomAvailability = async (
-  roomId: string,
-  checkIn: Date,
-  checkOut: Date,
-  hotelId: mongoose.Types.ObjectId,
-  excludeBookingId?: string
-): Promise<{ available: boolean; conflictingBooking?: any }> => {
-  // Normalize dates to start of day for comparison
-  const checkInStart = new Date(checkIn);
-  checkInStart.setHours(0, 0, 0, 0);
-  const checkOutStart = new Date(checkOut);
-  checkOutStart.setHours(0, 0, 0, 0);
-
-  // Build query to find overlapping bookings
-  const query: any = {
-    roomId: new mongoose.Types.ObjectId(roomId),
-    hotel: hotelId,
-    status: { $in: ["confirmed", "reserved"] }, // Check confirmed and reserved bookings (not cancelled or completed)
-    // Check for overlap: existing booking overlaps if:
-    // existing.checkIn < new.checkOut AND existing.checkOut > new.checkIn
-    $and: [
-      { checkIn: { $lt: checkOutStart } }, // Existing check-in is before new check-out
-      { checkOut: { $gt: checkInStart } }, // Existing check-out is after new check-in
-    ],
-  };
-
-  // Exclude current booking when updating
-  if (excludeBookingId) {
-    query._id = { $ne: new mongoose.Types.ObjectId(excludeBookingId) };
-  }
-
-  const conflictingBooking = await Booking.findOne(query).lean();
-
-  return {
-    available: !conflictingBooking,
-    conflictingBooking: conflictingBooking || undefined,
-  };
-};
-
 // POST create new booking
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
     const body = await request.json();
-    
+
     if (!body.hotel || !mongoose.Types.ObjectId.isValid(body.hotel)) {
       return NextResponse.json(
         { success: false, error: "Valid hotel ID is required" },
@@ -103,44 +59,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!body.roomId || !mongoose.Types.ObjectId.isValid(body.roomId)) {
+    const roomIds = normalizeRoomIdsInput(body);
+    if (roomIds.length === 0 || roomIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
       return NextResponse.json(
-        { success: false, error: "Valid room ID is required" },
+        { success: false, error: "Select at least one valid room" },
         { status: 400 }
       );
     }
-    
-    // Helper function to parse date string to local date (avoiding timezone issues)
-    const parseLocalDate = (dateStr: string | Date): Date => {
-      if (dateStr instanceof Date) {
-        const d = new Date(dateStr);
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      }
-      // Parse YYYY-MM-DD format as local date
-      const dateString = typeof dateStr === 'string' ? dateStr.split('T')[0] : String(dateStr);
-      const parts = dateString.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1; // Months are 0-indexed
-        const day = parseInt(parts[2], 10);
-        return new Date(year, month, day);
-      }
-      // Fallback to standard parsing
-      const d = new Date(dateStr);
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    };
-    
-    // Convert date strings to Date objects
+
+    // Deduplicate while preserving order
+    const uniqueRoomIds = Array.from(new Set(roomIds));
+
     let checkInDate: Date | null = null;
     let checkOutDate: Date | null = null;
-    
-    if (body.checkIn) {
-      checkInDate = parseLocalDate(body.checkIn);
-    }
-    
-    if (body.checkOut) {
-      checkOutDate = parseLocalDate(body.checkOut);
-    }
+
+    if (body.checkIn) checkInDate = parseLocalDate(body.checkIn);
+    if (body.checkOut) checkOutDate = parseLocalDate(body.checkOut);
 
     if (!checkInDate || !checkOutDate) {
       return NextResponse.json(
@@ -148,26 +82,40 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
-    // Validate dates before creating - checkOut must be at least 1 day after checkIn
-    if (checkInDate && checkOutDate) {
-      // Compare dates by converting to date strings to avoid timezone issues
-      const checkInStr = `${checkInDate.getFullYear()}-${String(checkInDate.getMonth() + 1).padStart(2, '0')}-${String(checkInDate.getDate()).padStart(2, '0')}`;
-      const checkOutStr = `${checkOutDate.getFullYear()}-${String(checkOutDate.getMonth() + 1).padStart(2, '0')}-${String(checkOutDate.getDate()).padStart(2, '0')}`;
-      
-      // Simple string comparison for dates in YYYY-MM-DD format
-      if (checkOutStr <= checkInStr) {
-        return NextResponse.json(
-          { success: false, error: `Check-out date (${checkOutStr}) must be after check-in date (${checkInStr})` },
-          { status: 400 }
-        );
-      }
+
+    const checkInStr = formatDateStr(checkInDate);
+    const checkOutStr = formatDateStr(checkOutDate);
+
+    if (checkOutStr <= checkInStr) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Check-out date (${checkOutStr}) must be after check-in date (${checkInStr})`,
+        },
+        { status: 400 }
+      );
     }
 
-    // Check if room is available for the requested dates
     const hotelObjectId = new mongoose.Types.ObjectId(body.hotel);
-    const availability = await checkRoomAvailability(
-      body.roomId,
+
+    const rooms = await Room.find({
+      _id: { $in: uniqueRoomIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      hotel: hotelObjectId,
+    }).lean();
+
+    if (rooms.length !== uniqueRoomIds.length) {
+      return NextResponse.json(
+        { success: false, error: "One or more selected rooms were not found for this hotel" },
+        { status: 400 }
+      );
+    }
+
+    const roomById = new Map(rooms.map((r: any) => [r._id.toString(), r]));
+    const orderedRooms = uniqueRoomIds.map((id) => roomById.get(id)!);
+    const roomNumbers = orderedRooms.map((r: any) => r.roomNumber);
+
+    const availability = await checkRoomsAvailability(
+      uniqueRoomIds,
       checkInDate,
       checkOutDate,
       hotelObjectId
@@ -176,32 +124,49 @@ export async function POST(request: NextRequest) {
     if (!availability.available) {
       const conflictingCheckIn = new Date(availability.conflictingBooking!.checkIn);
       const conflictingCheckOut = new Date(availability.conflictingBooking!.checkOut);
-      const conflictingCheckInStr = `${conflictingCheckIn.getFullYear()}-${String(conflictingCheckIn.getMonth() + 1).padStart(2, '0')}-${String(conflictingCheckIn.getDate()).padStart(2, '0')}`;
-      const conflictingCheckOutStr = `${conflictingCheckOut.getFullYear()}-${String(conflictingCheckOut.getMonth() + 1).padStart(2, '0')}-${String(conflictingCheckOut.getDate()).padStart(2, '0')}`;
-      
+      const conflictRoom = availability.conflictingRoomId
+        ? roomById.get(availability.conflictingRoomId)
+        : null;
+      const roomLabel = conflictRoom?.roomNumber || "selected room";
+
       return NextResponse.json(
         {
           success: false,
-          error: `Room is already booked from ${conflictingCheckInStr} to ${conflictingCheckOutStr}. Please select different dates.`,
+          error: `Room ${roomLabel} is already booked from ${formatDateStr(conflictingCheckIn)} to ${formatDateStr(conflictingCheckOut)}. Please select different rooms or dates.`,
         },
         { status: 400 }
       );
     }
-    
-    // Convert string hotelId to ObjectId for proper storage
+
     const bookingData = {
-      ...body,
       hotel: hotelObjectId,
+      roomIds: uniqueRoomIds.map((id) => new mongoose.Types.ObjectId(id)),
+      roomNumbers,
+      // Keep legacy mirrors for older consumers
+      roomId: uniqueRoomIds[0],
+      roomNumber: roomNumbers[0],
+      customerName: body.customerName,
+      customerEmail: body.customerEmail,
+      customerPhone: body.customerPhone,
       checkIn: checkInDate,
       checkOut: checkOutDate,
+      numberOfGuests: body.numberOfGuests,
+      totalPrice: body.totalPrice,
+      status: body.status,
+      bookingSource: body.bookingSource,
+      websiteUrl: body.websiteUrl,
+      specialRequests: body.specialRequests,
+      idDocument: body.idDocument,
+      discountType: body.discountType,
+      discountValue: body.discountValue,
+      checkedInAt: body.checkedInAt,
     };
-    
+
     const booking = await Booking.create(bookingData);
-    await booking.populate("roomId", "roomNumber roomType price");
-    
-    // Convert MongoDB document to plain object with string IDs
+    await booking.populate("roomIds", "roomNumber roomType price");
+
     const serializedBooking = serializeBooking(booking.toObject());
-    
+
     return NextResponse.json(
       { success: true, data: serializedBooking },
       { status: 201 }

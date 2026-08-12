@@ -7,10 +7,10 @@ import ComponentCard from "@/components/common/ComponentCard";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import Select from "@/components/form/Select";
+import MultiSelect from "@/components/form/MultiSelect";
 import TextArea from "@/components/form/input/TextArea";
 import DatePicker from "@/components/form/date-picker";
 import Button from "@/components/ui/button/Button";
-import SingleImageUpload from "@/components/form/SingleImageUpload";
 import Alert from "@/components/ui/alert/Alert";
 import { bookingAPI, roomAPI } from "@/lib/api";
 import { Room } from "@/types/room";
@@ -22,7 +22,7 @@ export default function AddBookingPage() {
   const { error: showError } = useToast();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [formData, setFormData] = useState({
-    roomId: "",
+    roomIds: [] as string[],
     customerName: "",
     customerEmail: "",
     customerPhone: "",
@@ -55,11 +55,11 @@ export default function AddBookingPage() {
   }, []);
 
   useEffect(() => {
-    if (formData.roomId && formData.checkIn && formData.checkOut) {
-      const selectedRoom = rooms.find(
-        (r) => (r._id || r.id) === formData.roomId
+    if (formData.roomIds.length > 0 && formData.checkIn && formData.checkOut) {
+      const selectedRooms = rooms.filter((r) =>
+        formData.roomIds.includes(String(r._id || r.id))
       );
-      if (selectedRoom) {
+      if (selectedRooms.length > 0) {
         const checkInDate = new Date(formData.checkIn);
         const checkOutDate = new Date(formData.checkOut);
         const nights = Math.ceil(
@@ -67,7 +67,10 @@ export default function AddBookingPage() {
             (1000 * 60 * 60 * 24)
         );
         if (nights > 0) {
-          const basePrice = selectedRoom.price * nights;
+          const basePrice = selectedRooms.reduce(
+            (sum, room) => sum + room.price * nights,
+            0
+          );
           let finalPrice = basePrice;
           const discVal = parseFloat(formData.discountValue) || 0;
           if (formData.discountType === "percentage") {
@@ -79,15 +82,25 @@ export default function AddBookingPage() {
         } else {
           setCalculatedPrice(0);
         }
+      } else {
+        setCalculatedPrice(0);
       }
     } else {
       setCalculatedPrice(0);
     }
-  }, [formData.roomId, formData.checkIn, formData.checkOut, formData.discountType, formData.discountValue, rooms]);
+  }, [
+    formData.roomIds,
+    formData.checkIn,
+    formData.checkOut,
+    formData.discountType,
+    formData.discountValue,
+    rooms,
+  ]);
 
   const roomOptions = rooms.map((room) => ({
     value: room._id || room.id || "",
-    label: `${room.roomNumber} - ${room.roomType} (LKR ${room.price}/night)`,
+    text: `${room.roomNumber} - ${room.roomType} (LKR ${room.price}/night)`,
+    selected: formData.roomIds.includes(String(room._id || room.id || "")),
   }));
 
   const statusOptions = [
@@ -116,8 +129,15 @@ export default function AddBookingPage() {
     }
   };
 
+  const handleRoomsChange = (selected: string[]) => {
+    setFormData((prev) => ({ ...prev, roomIds: selected }));
+    if (errors.roomIds) {
+      setErrors((prev) => ({ ...prev, roomIds: "" }));
+    }
+  };
+
   const handleDateChange = (name: string) => {
-    return (selectedDates: Date[], dateStr: string) => {
+    return (_selectedDates: Date[], dateStr: string) => {
       setFormData((prev) => ({ ...prev, [name]: dateStr }));
       if (errors[name]) {
         setErrors((prev) => ({ ...prev, [name]: "" }));
@@ -131,10 +151,14 @@ export default function AddBookingPage() {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.roomId) newErrors.roomId = "Room selection is required";
+    if (formData.roomIds.length === 0)
+      newErrors.roomIds = "Select at least one room";
     if (!formData.customerName.trim())
       newErrors.customerName = "Customer name is required";
-    if (formData.customerEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail))
+    if (
+      formData.customerEmail.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customerEmail)
+    )
       newErrors.customerEmail = "Invalid email format";
     if (!formData.checkIn) newErrors.checkIn = "Check-in date is required";
     if (!formData.checkOut) newErrors.checkOut = "Check-out date is required";
@@ -166,16 +190,16 @@ export default function AddBookingPage() {
     e.preventDefault();
     if (!validate()) return;
 
-    const selectedRoom = rooms.find(
-      (r) => (r._id || r.id) === formData.roomId
+    const selectedRooms = rooms.filter((r) =>
+      formData.roomIds.includes(String(r._id || r.id))
     );
-    if (!selectedRoom) return;
+    if (selectedRooms.length === 0) return;
 
     try {
       setLoading(true);
       await bookingAPI.create({
-        roomId: formData.roomId,
-        roomNumber: selectedRoom.roomNumber,
+        roomIds: formData.roomIds,
+        roomNumbers: selectedRooms.map((r) => r.roomNumber),
         customerName: formData.customerName,
         customerEmail: formData.customerEmail,
         customerPhone: formData.customerPhone,
@@ -201,6 +225,10 @@ export default function AddBookingPage() {
     }
   };
 
+  const selectedRoomsSummary = rooms.filter((r) =>
+    formData.roomIds.includes(String(r._id || r.id))
+  );
+
   return (
     <div>
       <PageBreadcrumb pageTitle="Create Booking" />
@@ -220,23 +248,27 @@ export default function AddBookingPage() {
             <p className="text-gray-500 dark:text-gray-400 mb-4">
               No available rooms found. Please add rooms first.
             </p>
-            <Button onClick={() => router.push("/rooms")}>
-              Go to Rooms
-            </Button>
+            <Button onClick={() => router.push("/rooms")}>Go to Rooms</Button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div>
-                <Label htmlFor="roomId">Select Room *</Label>
-                <Select
+              <div className="md:col-span-2">
+                <MultiSelect
+                  label="Select Rooms *"
                   options={roomOptions}
-                  placeholder="Select a room"
-                  onChange={(value) => handleSelectChange("roomId", value)}
-                  defaultValue={formData.roomId}
+                  value={formData.roomIds}
+                  onChange={handleRoomsChange}
+                  placeholder="Select one or more rooms"
                 />
-                {errors.roomId && (
-                  <p className="mt-1.5 text-xs text-error-500">{errors.roomId}</p>
+                {errors.roomIds && (
+                  <p className="mt-1.5 text-xs text-error-500">{errors.roomIds}</p>
+                )}
+                {selectedRoomsSummary.length > 1 && (
+                  <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {selectedRoomsSummary.length} rooms selected · same dates &
+                    guest total apply to the whole booking
+                  </p>
                 )}
               </div>
 
@@ -335,7 +367,6 @@ export default function AddBookingPage() {
                 />
               </div>
 
-              {/* Discount Type */}
               <div>
                 <Label htmlFor="discountType">Discount Type</Label>
                 <Select
@@ -350,7 +381,6 @@ export default function AddBookingPage() {
                 />
               </div>
 
-              {/* Discount Value */}
               {formData.discountType !== "none" && (
                 <div>
                   <Label htmlFor="discountValue">
@@ -364,7 +394,9 @@ export default function AddBookingPage() {
                     type="number"
                     placeholder="0"
                     min="0"
-                    max={formData.discountType === "percentage" ? "100" : undefined}
+                    max={
+                      formData.discountType === "percentage" ? "100" : undefined
+                    }
                     value={formData.discountValue}
                     onChange={handleChange}
                     error={!!errors.discountValue}
@@ -379,10 +411,22 @@ export default function AddBookingPage() {
                   id="totalPrice"
                   name="totalPrice"
                   type="text"
-                  value={`LKR ${calculatedPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                  value={`LKR ${calculatedPrice.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                  })}`}
                   disabled
                   className="bg-gray-100 dark:bg-gray-800"
                 />
+                {selectedRoomsSummary.length > 0 &&
+                  formData.checkIn &&
+                  formData.checkOut && (
+                    <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      Sum of selected room nightly rates × nights
+                      {formData.discountType !== "none"
+                        ? ", then whole-booking discount"
+                        : ""}
+                    </p>
+                  )}
               </div>
             </div>
 

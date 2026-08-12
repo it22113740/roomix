@@ -1,8 +1,23 @@
+export interface BookingRoomRef {
+  _id: string;
+  roomNumber: string;
+  roomType: string;
+  price: number;
+}
+
 export interface Booking {
   _id?: string;
   id?: string;
-  roomId: string | { _id: string; roomNumber: string; roomType: string; price: number };
-  roomNumber: string;
+  /** Multi-room: array of room ObjectIds (or populated room docs). */
+  roomIds: Array<string | BookingRoomRef>;
+  /** Denormalized room numbers matching roomIds order. */
+  roomNumbers: string[];
+  /**
+   * Legacy single-room fields kept optional for older documents / UI fallbacks.
+   * Prefer roomIds / roomNumbers.
+   */
+  roomId?: string | BookingRoomRef;
+  roomNumber?: string;
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -17,7 +32,7 @@ export interface Booking {
   discountType?: "percentage" | "fixed" | "none";
   discountValue?: number;
   specialRequests?: string;
-  idDocument?: string; // Cloudinary URL for NIC/Driver License
+  idDocument?: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
