@@ -14,12 +14,12 @@ const serializeAmenity = (amenity: any) => ({
 // GET single amenity by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const amenityId = String(resolvedParams.id || "").trim();
     
     if (!amenityId || !mongoose.Types.ObjectId.isValid(amenityId)) {
@@ -52,7 +52,7 @@ export async function GET(
 
     return NextResponse.json({ success: true, data: serializeAmenity(amenity) }, { status: 200 });
   } catch (error: any) {
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     console.error(`API Error (GET /api/amenities/${resolvedParams.id}):`, error);
     return NextResponse.json(
       { success: false, error: error.message },
@@ -64,12 +64,12 @@ export async function GET(
 // PUT update amenity
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const amenityId = String(resolvedParams.id || "").trim();
     
     if (!amenityId || !mongoose.Types.ObjectId.isValid(amenityId)) {
@@ -122,7 +122,7 @@ export async function PUT(
 
     return NextResponse.json({ success: true, data: serializeAmenity(amenity) }, { status: 200 });
   } catch (error: any) {
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     console.error(`API Error (PUT /api/amenities/${resolvedParams.id}):`, error);
     if (error.name === "ValidationError") {
       const errors = Object.values(error.errors).map((err: any) => err.message);
@@ -147,12 +147,12 @@ export async function PUT(
 // DELETE amenity
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const amenityId = String(resolvedParams.id || "").trim();
     
     if (!amenityId || !mongoose.Types.ObjectId.isValid(amenityId)) {
@@ -188,7 +188,7 @@ export async function DELETE(
       { status: 200 }
     );
   } catch (error: any) {
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     console.error(`API Error (DELETE /api/amenities/${resolvedParams.id}):`, error);
     return NextResponse.json(
       { success: false, error: error.message },

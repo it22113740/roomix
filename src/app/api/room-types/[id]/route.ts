@@ -14,12 +14,12 @@ const serializeRoomType = (roomType: any) => ({
 // GET single room type by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const roomTypeId = String(resolvedParams.id || "").trim();
     
     if (!roomTypeId || !mongoose.Types.ObjectId.isValid(roomTypeId)) {
@@ -52,7 +52,7 @@ export async function GET(
 
     return NextResponse.json({ success: true, data: serializeRoomType(roomType) }, { status: 200 });
   } catch (error: any) {
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     console.error(`API Error (GET /api/room-types/${resolvedParams.id}):`, error);
     return NextResponse.json(
       { success: false, error: error.message },
@@ -64,12 +64,12 @@ export async function GET(
 // PUT update room type
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const roomTypeId = String(resolvedParams.id || "").trim();
     
     if (!roomTypeId || !mongoose.Types.ObjectId.isValid(roomTypeId)) {
@@ -122,7 +122,7 @@ export async function PUT(
 
     return NextResponse.json({ success: true, data: serializeRoomType(roomType) }, { status: 200 });
   } catch (error: any) {
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     console.error(`API Error (PUT /api/room-types/${resolvedParams.id}):`, error);
     if (error.name === "ValidationError") {
       const errors = Object.values(error.errors).map((err: any) => err.message);
@@ -147,12 +147,12 @@ export async function PUT(
 // DELETE room type
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const roomTypeId = String(resolvedParams.id || "").trim();
     
     if (!roomTypeId || !mongoose.Types.ObjectId.isValid(roomTypeId)) {
@@ -188,7 +188,7 @@ export async function DELETE(
       { status: 200 }
     );
   } catch (error: any) {
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     console.error(`API Error (DELETE /api/room-types/${resolvedParams.id}):`, error);
     return NextResponse.json(
       { success: false, error: error.message },

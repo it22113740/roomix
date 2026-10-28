@@ -6,13 +6,12 @@ import mongoose from "mongoose";
 // GET single room by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    // Handle both Promise and direct params (Next.js 16 compatibility)
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const roomId = String(resolvedParams.id || "").trim();
     
     if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) {
@@ -63,13 +62,12 @@ export async function GET(
 // PUT update room
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    // Handle both Promise and direct params (Next.js 16 compatibility)
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const roomId = String(resolvedParams.id || "").trim();
     
     if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) {
@@ -153,13 +151,12 @@ export async function PUT(
 // DELETE room
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    // Handle both Promise and direct params (Next.js 16 compatibility)
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const roomId = String(resolvedParams.id || "").trim();
     
     if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) {

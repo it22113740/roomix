@@ -7,13 +7,12 @@ import { serializeBooking } from "@/lib/booking-api";
 // PATCH cancel booking
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
     
-    // Handle both Promise and direct params (Next.js 16 compatibility)
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const bookingId = String(resolvedParams.id || "").trim();
     
     if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {

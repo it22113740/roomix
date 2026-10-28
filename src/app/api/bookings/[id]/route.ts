@@ -14,12 +14,12 @@ import {
 // GET single booking by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
 
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const bookingId = String(resolvedParams.id || "").trim();
 
     if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
@@ -67,12 +67,12 @@ export async function GET(
 // PUT update booking
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
 
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const bookingId = String(resolvedParams.id || "").trim();
 
     if (!bookingId || bookingId.length !== 24 || !mongoose.Types.ObjectId.isValid(bookingId)) {
@@ -268,12 +268,12 @@ export async function PUT(
 // DELETE booking
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
 
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await params;
     const bookingId = String(resolvedParams.id || "").trim();
 
     if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
